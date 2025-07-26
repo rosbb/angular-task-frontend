@@ -1,8 +1,9 @@
-import { Component } from "@angular/core"
-import { type FormBuilder, type FormGroup, Validators, ReactiveFormsModule } from "@angular/forms"
-import { type Router, RouterLink } from "@angular/router"
-import type { AuthService } from "../../services/auth.service"
-import { CommonModule } from "@angular/common"
+import { Component, OnDestroy } from "@angular/core";
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, FormControl } from "@angular/forms";
+import { Router, RouterLink } from "@angular/router";
+import { AuthService } from "../../services/auth.service";
+import { CommonModule } from "@angular/common";
+import { Subject, takeUntil } from "rxjs";
 
 @Component({
   selector: "app-login",
@@ -22,6 +23,7 @@ import { CommonModule } from "@angular/common"
               formControlName="email"
               class="form-input"
               placeholder="tu@email.com"
+              [attr.aria-invalid]="loginForm.get('email')?.invalid && loginForm.get('email')?.touched"
             >
             <div *ngIf="loginForm.get('email')?.touched && loginForm.get('email')?.errors?.['required']"
                  class="error-message">
@@ -41,6 +43,7 @@ import { CommonModule } from "@angular/common"
               formControlName="password"
               class="form-input"
               placeholder="Contraseña"
+              [attr.aria-invalid]="loginForm.get('password')?.invalid && loginForm.get('password')?.touched"
             >
             <div *ngIf="loginForm.get('password')?.touched && loginForm.get('password')?.errors?.['required']"
                  class="error-message">
@@ -52,7 +55,7 @@ import { CommonModule } from "@angular/common"
             </div>
           </div>
 
-          <div *ngIf="error" class="error-message">
+          <div *ngIf="error" class="error-message" role="alert">
             {{ error }}
           </div>
 
@@ -60,8 +63,9 @@ import { CommonModule } from "@angular/common"
             type="submit"
             [disabled]="loginForm.invalid || isLoading"
             class="btn-primary"
+            [attr.aria-busy]="isLoading"
           >
-            <span *ngIf="isLoading">Cargando...</span>
+            <span *ngIf="isLoading" aria-live="polite">Cargando...</span>
             <span *ngIf="!isLoading">Iniciar Sesión</span>
           </button>
 
@@ -126,6 +130,10 @@ import { CommonModule } from "@angular/common"
       border-color: #6366f1;
       box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
     }
+
+    .form-input[aria-invalid="true"] {
+      border-color: #ef4444;
+    }
     
     .btn-primary {
       width: 100%;
@@ -139,6 +147,7 @@ import { CommonModule } from "@angular/common"
       cursor: pointer;
       transition: background-color 0.15s ease-in-out;
       margin-top: 1rem;
+      position: relative;
     }
     
     .btn-primary:hover:not(:disabled) {
@@ -148,6 +157,10 @@ import { CommonModule } from "@angular/common"
     .btn-primary:disabled {
       background-color: #9ca3af;
       cursor: not-allowed;
+    }
+
+    .btn-primary[aria-busy="true"] {
+      color: transparent;
     }
     
     .error-message {
@@ -175,10 +188,11 @@ import { CommonModule } from "@angular/common"
   `,
   ],
 })
-export class LoginComponent {
-  loginForm: FormGroup
-  error = ""
-  isLoading = false
+export class LoginComponent implements OnDestroy {
+  loginForm: FormGroup;
+  error = "";
+  isLoading = false;
+  private destroy$ = new Subject<void>();
 
   constructor(
     private fb: FormBuilder,
@@ -186,27 +200,49 @@ export class LoginComponent {
     private router: Router,
   ) {
     this.loginForm = this.fb.group({
-      email: ["", [Validators.required, Validators.email]],
-      password: ["", [Validators.required, Validators.minLength(6)]],
-    })
+      email: new FormControl('', [Validators.required, Validators.email]),
+      password: new FormControl('', [Validators.required, Validators.minLength(6)]),
+    });
   }
 
   onSubmit(): void {
     if (this.loginForm.valid) {
-      this.isLoading = true
-      this.error = ""
+      this.isLoading = true;
+      this.error = "";
 
-      const { email, password } = this.loginForm.value
+      const { email, password } = this.loginForm.value;
 
-      this.authService.login(email, password).subscribe({
-        next: () => {
-          this.router.navigate(["/tasks"])
+      this.authService.login(email, password).pipe(
+        takeUntil(this.destroy$)
+      ).subscribe({
+        next: (response) => {
+          // Guardar token en localStorage
+          localStorage.setItem('token', response.token);
+          localStorage.setItem('user', JSON.stringify(response.user));
+          
+          // Redirigir al dashboard
+          this.router.navigate(["/tasks"]);
         },
         error: (error) => {
-          this.error = error.error?.message || "Error al iniciar sesión"
-          this.isLoading = false
-        },
-      })
+          console.error('Login error:', error);
+          
+          // Manejo mejorado de errores
+          if (error.status === 401) {
+            this.error = "Credenciales inválidas";
+          } else if (error.status === 0) {
+            this.error = "No hay conexión con el servidor";
+          } else {
+            this.error = error.error?.message || "Error al iniciar sesión";
+          }
+          
+          this.isLoading = false;
+        }
+      });
     }
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }

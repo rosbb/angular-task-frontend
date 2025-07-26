@@ -1,7 +1,7 @@
 import { Component, type OnInit } from "@angular/core"
 import { RouterOutlet } from "@angular/router"
 import { CommonModule } from "@angular/common"
-import type { AuthService } from "./services/auth.service"
+import { AuthService } from "./services/auth.service"
 
 @Component({
   selector: "app-root",
