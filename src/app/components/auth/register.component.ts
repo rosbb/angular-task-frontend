@@ -260,40 +260,37 @@ export class RegisterComponent implements OnDestroy {
   }
 
   onSubmit(): void {
-    if (this.registerForm.valid) {
-      this.isLoading = true;
-      this.error = "";
-
-      const { name, email, password } = this.registerForm.value;
-
-      this.authService
-        .register({ name, email, password })
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (response) => {
-            // Usar el método de éxito del AuthService
-            this.authService.loginSuccess(response);
-            this.router.navigate(["/tasks"]);
-          },
-          error: (error) => {
-            console.error("Register error:", error);
-
-            if (error.status === 409) {
-              this.error = "El email ya está registrado";
-            } else if (error.status === 0) {
-              this.error = "No hay conexión con el servidor";
-            } else if (error.error?.errors) {
-              // Manejar errores de validación del backend
-              this.error = Object.values(error.error.errors).join(", ");
-            } else {
-              this.error = error.error?.message || "Error al registrarse";
-            }
-
-            this.isLoading = false;
-          },
-        });
-    }
+  if (this.registerForm.valid) {
+    this.isLoading = true;
+    this.error = "";
+    
+    const { name, email, password } = this.registerForm.value;
+    
+    // Enviar 'username' en lugar de 'name' al backend
+    this.authService
+      .register({ username: name, email, password })  // ← Cambio aquí
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          this.authService.loginSuccess(response);
+          this.router.navigate(["/tasks"]);
+        },
+        error: (error) => {
+          console.error("Register error:", error);
+          if (error.status === 409) {
+            this.error = "El email ya está registrado";
+          } else if (error.status === 0) {
+            this.error = "No hay conexión con el servidor";
+          } else if (error.error?.errors) {
+            this.error = Object.values(error.error.errors).join(", ");
+          } else {
+            this.error = error.error?.message || "Error al registrarse";
+          }
+          this.isLoading = false;
+        },
+      });
   }
+}
 
   ngOnDestroy(): void {
     this.destroy$.next();
